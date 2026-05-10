@@ -1,0 +1,23 @@
+{
+  "name": "easy-listening",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @easy-listening/mobile",
+    "dev:mobile": "npm run dev -w @easy-listening/mobile",
+    "ios": "npm run ios -w @easy-listening/mobile",
+    "android": "npm run android -w @easy-listening/mobile",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "sync:assets": "bash ./scripts/sync-assets.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

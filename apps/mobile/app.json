@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "easy listening",
+    "slug": "easy-listening",
+    "scheme": "easylistening",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eas.listening"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#f6f1e8"
+      },
+      "package": "com.eas.listening"
+    },
+    "plugins": [],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
