@@ -32,9 +32,12 @@ npm install
 ```bash
 cd backend
 python3 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip setuptools wheel
 ./.venv/bin/pip install -e ".[dev]"
 cd ..
 ```
+
+如果 Linux 服务器上遇到 `setup.py not found`，通常是虚拟环境里的 `pip/setuptools` 版本过旧。先执行上面的升级命令即可；项目也保留了 `backend/setup.py` 兼容旧版 editable install。
 
 如果你本地没有 `backend/.env_dev`，可以先从示例文件复制：
 

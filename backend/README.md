@@ -8,6 +8,14 @@ This backend follows the same broad pattern as the existing "英语精听酱" se
 
 ## Runtime entry
 
+Install dependencies inside `backend/`:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip setuptools wheel
+./.venv/bin/pip install -e ".[dev]"
+```
+
 ```bash
 PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
 ```
