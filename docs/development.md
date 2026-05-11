@@ -31,13 +31,25 @@ npm install
 
 ```bash
 cd backend
-python3 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip setuptools wheel
-./.venv/bin/pip install -e ".[dev]"
+python3.11 -m venv .venv
+./.venv/bin/python -m pip install \
+  -i https://mirrors.aliyun.com/pypi/simple/ \
+  --trusted-host mirrors.aliyun.com \
+  --timeout 120 \
+  --retries 10 \
+  --upgrade pip setuptools wheel
+./.venv/bin/pip install \
+  -i https://mirrors.aliyun.com/pypi/simple/ \
+  --trusted-host mirrors.aliyun.com \
+  --timeout 120 \
+  --retries 10 \
+  -e ".[dev]"
 cd ..
 ```
 
-如果 Linux 服务器上遇到 `setup.py not found`，通常是虚拟环境里的 `pip/setuptools` 版本过旧。先执行上面的升级命令即可；项目也保留了 `backend/setup.py` 兼容旧版 editable install。
+后端要求 Python 3.11 及以上。如果 Linux 服务器上遇到 `setup.py not found`，通常是虚拟环境里的 `pip/setuptools` 版本过旧。先执行上面的升级命令即可；项目也保留了 `backend/setup.py` 兼容旧版 editable install。
+
+如果服务器访问 `files.pythonhosted.org` 很慢或经常超时，上面的命令会改用阿里云 PyPI 镜像，并把超时时间和重试次数调高。
 
 如果你本地没有 `backend/.env_dev`，可以先从示例文件复制：
 

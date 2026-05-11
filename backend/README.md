@@ -11,10 +11,24 @@ This backend follows the same broad pattern as the existing "英语精听酱" se
 Install dependencies inside `backend/`:
 
 ```bash
-python3 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip setuptools wheel
-./.venv/bin/pip install -e ".[dev]"
+python3.11 -m venv .venv
+./.venv/bin/python -m pip install \
+  -i https://mirrors.aliyun.com/pypi/simple/ \
+  --trusted-host mirrors.aliyun.com \
+  --timeout 120 \
+  --retries 10 \
+  --upgrade pip setuptools wheel
+./.venv/bin/pip install \
+  -i https://mirrors.aliyun.com/pypi/simple/ \
+  --trusted-host mirrors.aliyun.com \
+  --timeout 120 \
+  --retries 10 \
+  -e ".[dev]"
 ```
+
+The backend requires Python 3.11 or newer. On Aliyun or other servers with
+unstable access to `files.pythonhosted.org`, use the mirror options above
+instead of the default PyPI index.
 
 ```bash
 PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
