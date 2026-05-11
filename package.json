@@ -2,6 +2,7 @@
   "name": "easy-listening",
   "private": true,
   "version": "0.1.0",
+  "main": "index.js",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -10,14 +11,22 @@
     "node": ">=20 <21"
   },
   "scripts": {
-    "dev": "npm run dev -w @easy-listening/mobile",
-    "dev:mobile": "npm run dev -w @easy-listening/mobile",
-    "ios": "npm run ios -w @easy-listening/mobile",
-    "android": "npm run android -w @easy-listening/mobile",
+    "dev": "expo start --clear",
+    "dev:web": "expo start --web --clear",
+    "dev:mobile": "expo start --clear",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "backend:dev": "PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload",
+    "backend:test": "PYTHONPATH=backend ./backend/.venv/bin/pytest backend/tests",
     "typecheck": "npm run typecheck -ws --if-present",
     "sync:assets": "bash ./scripts/sync-assets.sh"
   },
   "devDependencies": {
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "expo": "~52.0.49",
+    "react": "18.3.1",
+    "react-native": "0.76.9"
   }
 }

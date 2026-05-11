@@ -11,18 +11,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.eas.listening"
+      "bundleIdentifier": "com.anonymous.easy-listening"
     },
     "android": {
       "usesCleartextTraffic": true,
+      "package": "com.anonymous.easylistening",
       "adaptiveIcon": {
         "backgroundColor": "#f6f1e8"
-      },
-      "package": "com.eas.listening"
-    },
-    "plugins": [],
-    "experiments": {
-      "typedRoutes": false
+      }
     }
   }
 }

@@ -39,11 +39,16 @@ export interface ArticleMeta {
   processingStatus?: string | null;
   series?: string | null;
   summaryText?: string | null;
+  tags?: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface ArticleDetail extends ArticleMeta {
   bodyText?: string;
   summaryBlocks: ArticleSummaryBlock[];
+  keyWords?: unknown[];
+  keyPhrases?: unknown[];
   sentences: Sentence[];
 }
 
@@ -51,8 +56,13 @@ export interface ResourceCollection {
   id: string;
   title: string;
   description: string;
-  level: string;
   articleCount: number;
-  totalDurationLabel: string;
   coverImage?: string | null;
+  latestArticleId?: string | null;
+  lastUpdatedLabel?: string | null;
+}
+
+export interface TopicSummary {
+  name: string;
+  count: number;
 }
