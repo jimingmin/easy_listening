@@ -96,20 +96,20 @@ npm run backend:dev
 当前命令实际执行的是：
 
 ```bash
-PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
+PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8082 --reload
 ```
 
 这样启动的原因：
 
 - `127.0.0.1` 只允许当前电脑自己访问
 - `0.0.0.0` 允许 iOS 模拟器、Expo 局域网调试和真机访问到本机后端
-- 移动端默认会按平台尝试本机后端地址：iOS 模拟器优先 `http://127.0.0.1:8000`，Android 模拟器优先 `http://10.0.2.2:8000`，再兜底 Expo/Metro 暴露的局域网地址
-- 如果显式设置了 `EXPO_PUBLIC_API_BASE_URL=http://localhost:8000` 或 `http://0.0.0.0:8000`，移动端也会自动改写为当前平台可访问的模拟器地址
+- 移动端默认会按平台尝试本机后端地址：iOS 模拟器优先 `http://127.0.0.1:8082`，Android 模拟器优先 `http://10.0.2.2:8082`，再兜底 Expo/Metro 暴露的局域网地址
+- 如果显式设置了 `EXPO_PUBLIC_API_BASE_URL=http://localhost:8082` 或 `http://0.0.0.0:8082`，移动端也会自动改写为当前平台可访问的模拟器地址
 
 可以用下面的命令确认后端是否真的可用：
 
 ```bash
-curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8082/healthz
 ```
 
 如果返回 `{"status":"ok", ...}`，说明服务进程本身已经正常启动。
@@ -197,8 +197,8 @@ npm run ios
 - `ios/.xcode.env` 会读取当前系统里的 `node`
 - `ios/.xcode.env.local` 可以固定本机 Node 路径，避免 Xcode 找不到正确版本
 - 如果出现 Pods 与锁文件不同步的问题，先检查 `ios/Podfile.lock` 和 Pods 是否一致
-- 如果页面提示“资源接口暂时不可用”，先看页面上展示的“当前请求地址”，再确认后端是否能通过 `curl http://127.0.0.1:8000/healthz` 访问
-- 真机调试时，如果需要手动指定接口地址，可以设置 `EXPO_PUBLIC_API_BASE_URL=http://你的局域网IP:8000`
+- 如果页面提示“资源接口暂时不可用”，先看页面上展示的“当前请求地址”，再确认后端是否能通过 `curl http://127.0.0.1:8082/healthz` 访问
+- 真机调试时，如果需要手动指定接口地址，可以设置 `EXPO_PUBLIC_API_BASE_URL=http://你的局域网IP:8082`
 
 当前 iOS Bundle Identifier 配置见：
 

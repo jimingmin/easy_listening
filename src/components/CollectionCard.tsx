@@ -13,70 +13,52 @@ export function CollectionCard({ collection }: { collection: ResourceCollection 
         )}
       </View>
       <View style={styles.body}>
-        <Text style={styles.eyebrow}>合集</Text>
-        <Text style={styles.title}>{collection.title}</Text>
-        <Text style={styles.description}>{collection.description}</Text>
+        <Text style={styles.title} numberOfLines={1}>{collection.title}</Text>
+        <Text style={styles.meta} numberOfLines={1}>
+          {collection.articleCount} 篇{collection.lastUpdatedLabel ? ` · ${collection.lastUpdatedLabel}` : ''}
+        </Text>
       </View>
-      <Text style={styles.meta}>
-        {collection.articleCount} 篇
-        {collection.lastUpdatedLabel ? ` · ${collection.lastUpdatedLabel}` : ''}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    width: 270,
-    backgroundColor: '#0f172a',
-    borderRadius: 24,
-    padding: 14,
-    gap: 12,
-    marginRight: 12,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 2
+    width: 140,
+    marginRight: 16,
+    gap: 8,
   },
   cover: {
-    height: 116,
-    borderRadius: 18,
-    backgroundColor: '#1e293b',
+    width: 140,
+    height: 140,
+    borderRadius: 8,
+    backgroundColor: '#f2f2f7',
     overflow: 'hidden',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.1)',
   },
   coverImage: {
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
   coverFallback: {
-    color: '#fb923c',
+    color: '#8e8e93',
     fontSize: 30,
-    fontWeight: '900'
+    fontWeight: '700',
   },
   body: {
-    gap: 7
-  },
-  eyebrow: {
-    color: '#fb923c',
-    fontSize: 12,
-    fontWeight: '800'
+    gap: 2,
   },
   title: {
-    color: '#fff8ef',
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '800'
-  },
-  description: {
-    color: '#d3dce3',
-    fontSize: 14,
-    lineHeight: 20
+    color: '#000000',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600',
   },
   meta: {
-    color: '#8aa0b2',
-    fontSize: 13
-  }
+    color: '#8e8e93',
+    fontSize: 13,
+  },
 });

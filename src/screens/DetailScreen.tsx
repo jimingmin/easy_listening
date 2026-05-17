@@ -1,12 +1,17 @@
-import React, { useEffect, useRef } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, type DimensionValue } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, SafeAreaView, Dimensions, Platform, type DimensionValue, ActionSheetIOS } from 'react-native';
 import type { ArticleDetail, PlaybackMode, Sentence, SubtitleMode } from '../models/article';
-import { SegmentedTabs } from '../components/SegmentedTabs';
+
+const { width } = Dimensions.get('window');
+const CONTENT_PADDING = 32;
+const coverSize = width - CONTENT_PADDING * 2;
+const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5];
 
 interface DetailScreenProps {
   article: ArticleDetail | null;
   isLoading: boolean;
   errorMessage: string | null;
+  playbackErrorMessage?: string | null;
   onRetry: () => void;
   subtitleMode: SubtitleMode;
   setSubtitleMode: (mode: SubtitleMode) => void;
@@ -23,6 +28,8 @@ interface DetailScreenProps {
   currentSentenceIndex: number;
   onBack: () => void;
   onPlaySentence: (index: number) => void;
+  onSeekSentence: (index: number) => void;
+  onSeekBy: (deltaMs: number) => void;
 }
 
 function formatTime(ms?: number | null): string {
@@ -42,11 +49,157 @@ function getSentenceDurationMs(sentence?: Sentence | null): number {
   return Math.max(0, sentence.endMs - sentence.startMs);
 }
 
-function ProgressLine({ progress }: { progress: DimensionValue }) {
+function formatEpisodeDate(value?: string | null): string | null {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const monthLabels = [
+    'JANUARY',
+    'FEBRUARY',
+    'MARCH',
+    'APRIL',
+    'MAY',
+    'JUNE',
+    'JULY',
+    'AUGUST',
+    'SEPTEMBER',
+    'OCTOBER',
+    'NOVEMBER',
+    'DECEMBER',
+  ];
+
+  return `${date.getDate()} ${monthLabels[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function ProgressBar({
+  progress,
+  isIntensive,
+  trackColor = '#e5e5ea',
+  fillColor,
+  knobColor = '#000000',
+}: {
+  progress: DimensionValue;
+  isIntensive: boolean;
+  trackColor?: string;
+  fillColor?: string;
+  knobColor?: string;
+}) {
+  const resolvedFillColor = fillColor ?? (isIntensive ? '#007aff' : '#8e8e93');
+
   return (
-    <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: progress }]} />
+    <View style={[styles.progressTrack, { backgroundColor: trackColor }]}>
+      <View style={[styles.progressFill, { width: progress, backgroundColor: resolvedFillColor }]} />
+      <View style={[styles.progressKnob, { left: progress, backgroundColor: knobColor }]} />
     </View>
+  );
+}
+
+function SubtitleModeSwitch({
+  subtitleMode,
+  setSubtitleMode,
+  tone = 'light',
+}: {
+  subtitleMode: SubtitleMode;
+  setSubtitleMode: (mode: SubtitleMode) => void;
+  tone?: 'light' | 'dark';
+}) {
+  const isDark = tone === 'dark';
+
+  return (
+    <View style={[styles.subtitleModeSwitch, isDark ? styles.subtitleModeSwitchDark : null]}>
+      {([
+        { mode: 'en' as const, label: '英' },
+        { mode: 'both' as const, label: '中英' },
+        { mode: 'zh' as const, label: '中' },
+      ]).map((option) => {
+        const active = option.mode === subtitleMode;
+        return (
+          <Pressable
+            key={option.mode}
+            onPress={() => setSubtitleMode(option.mode)}
+            style={[
+              styles.subtitleModeChip,
+              active ? styles.subtitleModeChipActive : null,
+              isDark && active ? styles.subtitleModeChipActiveDark : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.subtitleModeChipText,
+                isDark ? styles.subtitleModeChipTextDark : null,
+                active ? styles.subtitleModeChipTextActive : null,
+                isDark && active ? styles.subtitleModeChipTextActiveDark : null,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function CaptionsIcon({ active, tone = 'light' }: { active: boolean, tone?: 'light' | 'dark' }) {
+  const tintColor = tone === 'dark'
+    ? (active ? '#ffffff' : 'rgba(255,255,255,0.82)')
+    : (active ? '#007aff' : '#a1a1a6');
+
+  return (
+    <View style={[styles.captionsIcon, { borderColor: tintColor }]}>
+      <View style={styles.captionsIconRow}>
+        <View style={[styles.captionsIconLine, { backgroundColor: tintColor, width: 7 }]} />
+        <View style={[styles.captionsIconLine, { backgroundColor: tintColor, width: 5 }]} />
+      </View>
+      <View style={styles.captionsIconRow}>
+        <View style={[styles.captionsIconLine, { backgroundColor: tintColor, width: 5 }]} />
+        <View style={[styles.captionsIconLine, { backgroundColor: tintColor, width: 7 }]} />
+      </View>
+    </View>
+  );
+}
+
+function QueueIcon() {
+  return (
+    <View style={styles.queueIcon}>
+      {[0, 1, 2].map((row) => (
+        <View key={row} style={styles.queueIconRow}>
+          <View style={styles.queueIconDot} />
+          <View style={styles.queueIconLine} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function BroadcastIcon() {
+  return (
+    <View style={styles.broadcastIcon}>
+      <View style={styles.broadcastRingOuter} />
+      <View style={styles.broadcastRingInner} />
+      <View style={styles.broadcastBase} />
+    </View>
+  );
+}
+
+function PodcastSkipButton({
+  seconds,
+  direction,
+  onPress,
+}: {
+  seconds: number;
+  direction: 'back' | 'forward';
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.podcastSkipButton}>
+      <View style={styles.podcastSkipCircle}>
+        <Text style={styles.podcastSkipNumber}>{seconds}</Text>
+        <Text style={styles.podcastSkipArrow}>{direction === 'back' ? '<<' : '>>'}</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -54,6 +207,7 @@ export function DetailScreen({
   article,
   isLoading,
   errorMessage,
+  playbackErrorMessage,
   onRetry,
   subtitleMode,
   setSubtitleMode,
@@ -69,39 +223,65 @@ export function DetailScreen({
   onJumpSentence,
   currentSentenceIndex,
   onBack,
-  onPlaySentence
+  onPlaySentence,
+  onSeekSentence,
+  onSeekBy
 }: DetailScreenProps) {
   const scrollRef = useRef<ScrollView | null>(null);
+  const intensiveTranscriptListOffsetRef = useRef(0);
+  const intensiveTranscriptRowOffsetsRef = useRef<Record<number, number>>({});
+  const podcastTranscriptRowOffsetsRef = useRef<Record<number, number>>({});
+  const [isPodcastTranscriptVisible, setIsPodcastTranscriptVisible] = useState(false);
 
   useEffect(() => {
-    if (!article) return;
-    const targetY = 560 + currentSentenceIndex * 112;
-    scrollRef.current?.scrollTo({ y: Math.max(0, targetY - 240), animated: true });
-  }, [article, currentSentenceIndex]);
+    setIsPodcastTranscriptVisible(false);
+  }, [article?.id]);
+
+  useEffect(() => {
+    intensiveTranscriptListOffsetRef.current = 0;
+    intensiveTranscriptRowOffsetsRef.current = {};
+    podcastTranscriptRowOffsetsRef.current = {};
+  }, [article?.id, subtitleMode]);
+
+  const isIntensive = playbackMode === 'sentence';
+  const shouldAutoScrollTranscript = isIntensive || isPodcastTranscriptVisible;
+
+  useEffect(() => {
+    if (!article || !shouldAutoScrollTranscript) return;
+
+    const scrollHandle = setTimeout(() => {
+      const isPodcastTranscript = !isIntensive && isPodcastTranscriptVisible;
+      const measuredY = isPodcastTranscript
+        ? podcastTranscriptRowOffsetsRef.current[currentSentenceIndex]
+        : intensiveTranscriptListOffsetRef.current + (intensiveTranscriptRowOffsetsRef.current[currentSentenceIndex] ?? currentSentenceIndex * 96);
+      const fallbackY = isPodcastTranscript
+        ? currentSentenceIndex * 96
+        : 600 + currentSentenceIndex * 110;
+      const targetY = measuredY ?? fallbackY;
+      const viewportOffset = isPodcastTranscript ? 128 : 280;
+
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, targetY - viewportOffset),
+        animated: false,
+      });
+    }, 0);
+
+    return () => clearTimeout(scrollHandle);
+  }, [article, currentSentenceIndex, isIntensive, isPodcastTranscriptVisible, shouldAutoScrollTranscript]);
 
   if (!article) {
     return (
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backLabel}>返回资源列表</Text>
-        </Pressable>
-
-        <View style={styles.stateCard}>
-          <Text style={styles.summaryHeading}>
-            {isLoading ? '正在加载文章内容' : '文章详情暂时不可用'}
-          </Text>
-          <Text style={styles.loadingBody}>
-            {isLoading
-              ? '正在从后端获取这篇文章的摘要、正文与句子时间轴。'
-              : (errorMessage ?? '这篇文章的详情数据暂时还没有加载成功。')}
-          </Text>
-          {!isLoading ? (
-            <Pressable onPress={onRetry} style={styles.retryButton}>
-              <Text style={styles.retryLabel}>重新加载文章</Text>
-            </Pressable>
-          ) : null}
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.topBar}>
+          <Pressable onPress={onBack} style={styles.topChevronDrag} hitSlop={15}>
+            <View style={styles.dragHandle} />
+          </Pressable>
         </View>
-      </ScrollView>
+        <View style={styles.stateContainer}>
+          <Text style={styles.stateTitle}>{isLoading ? 'Loading...' : 'Error'}</Text>
+          <Text style={styles.stateBody}>{isLoading ? '加载内容中...' : (errorMessage ?? '加载失败')}</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -115,582 +295,1038 @@ export function DetailScreen({
   const sentenceProgress: DimensionValue = sentenceDurationMs > 0
     ? `${Math.min(100, Math.max(0, ((progressMs - sentenceStartMs) / sentenceDurationMs) * 100))}%`
     : '0%';
-  const speedOptions = [0.75, 1, 1.25, 1.5];
+
   const showEnglish = subtitleMode === 'en' || subtitleMode === 'both';
   const showChinese = subtitleMode === 'zh' || subtitleMode === 'both';
+  const podcastSubtitle = article.series?.trim() || article.topic || '公开资源';
+  const podcastEyebrow = formatEpisodeDate(article.createdAt ?? article.updatedAt) ?? String(article.topic ?? 'EPISODE').toUpperCase();
 
-  const renderSentenceText = (sentence: Sentence, active: boolean, large = false, inverse = false) => (
-    <View style={styles.sentenceBody}>
-      {showEnglish ? (
-        <Text style={[
-          large ? styles.stageEnglish : styles.english,
-          large && inverse ? styles.stageEnglishInverse : null,
-          active ? (large ? (inverse ? styles.stageEnglishActiveInverse : styles.stageEnglishActive) : styles.englishActive) : null
-        ]}>
-          {sentence.text}
-        </Text>
-      ) : null}
-      {showChinese ? (
-        <Text style={[
-          large ? styles.stageChinese : styles.chinese,
-          large && inverse ? styles.stageChineseInverse : null,
-          active ? (large ? (inverse ? styles.stageChineseActiveInverse : styles.stageChineseActive) : styles.chineseActive) : null
-        ]}>
-          {sentence.translation ?? '暂无翻译'}
-        </Text>
-      ) : null}
-    </View>
-  );
+  const showSpeedOptions = () => {
+    if (Platform.OS !== 'ios') {
+      const currentIndex = SPEED_OPTIONS.findIndex((option) => option === playbackRate);
+      const nextRate = SPEED_OPTIONS[(currentIndex + 1) % SPEED_OPTIONS.length] ?? 1;
+      setPlaybackRate(nextRate);
+      return;
+    }
+
+    const displayOptions = ['取消', '0.75x', '1.0x', '1.25x', '1.5x'];
+    const exactOptions = [1, 0.75, 1, 1.25, 1.5];
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options: displayOptions, cancelButtonIndex: 0 },
+      (btnIdx) => { if (btnIdx > 0) setPlaybackRate(exactOptions[btnIdx]); }
+    );
+  };
+
+  const showMoreOptions = () => {
+    if (Platform.OS !== 'ios') {
+      setPlaybackMode(isIntensive ? 'full' : 'sentence');
+      return;
+    }
+
+    const options = [
+      '取消',
+      isIntensive ? '退出精听模式' : '进入精听模式',
+      isSentenceLooping ? '关闭单句循环' : '开启单句循环'
+    ];
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options, cancelButtonIndex: 0 },
+      (btnIdx) => {
+        if (btnIdx === 1) setPlaybackMode(isIntensive ? 'full' : 'sentence');
+        if (btnIdx === 2) onToggleSentenceLoop();
+      }
+    );
+  };
+
+  const renderTranscriptList = (onPressSentence: (index: number) => void) => {
+    if (article.sentences.length === 0) {
+      return (
+        <View style={styles.transcriptList}>
+          <Text style={styles.transcriptEmpty}>当前资源还没有可用字幕。</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View
+        style={styles.transcriptList}
+        onLayout={(event) => {
+          intensiveTranscriptListOffsetRef.current = event.nativeEvent.layout.y;
+        }}
+      >
+        {article.sentences.map((sentence, index) => {
+          const active = index === currentSentenceIndex;
+          return (
+            <Pressable
+              key={sentence.id}
+              onPress={() => onPressSentence(index)}
+              onLayout={(event) => {
+                intensiveTranscriptRowOffsetsRef.current[index] = event.nativeEvent.layout.y;
+              }}
+              style={styles.sentenceRow}
+            >
+              {showEnglish && (
+                <Text style={[styles.transcriptPrimary, active ? styles.transcriptPrimaryActive : null]}>
+                  {sentence.text}
+                </Text>
+              )}
+              {showChinese && (
+                <Text style={[styles.transcriptSecondary, active ? styles.transcriptSecondaryActive : null, showEnglish ? { marginTop: 6 } : null]}>
+                  {sentence.translation ?? '暂无翻译'}
+                </Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderPodcastTranscriptStage = () => {
+    if (article.sentences.length === 0) {
+      return (
+        <View style={styles.podcastTranscriptEmptyWrap}>
+          <Text style={styles.podcastTranscriptEmpty}>当前资源还没有可用字幕。</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        ref={scrollRef}
+        style={styles.podcastTranscriptViewport}
+        contentContainerStyle={styles.podcastTranscriptContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {article.sentences.map((sentence, index) => {
+          const active = index === currentSentenceIndex;
+          return (
+            <Pressable
+              key={sentence.id}
+              onPress={() => onSeekSentence(index)}
+              onLayout={(event) => {
+                podcastTranscriptRowOffsetsRef.current[index] = event.nativeEvent.layout.y;
+              }}
+              style={styles.podcastSentenceRow}
+            >
+              {showEnglish ? (
+                <Text style={[styles.podcastSentencePrimary, active ? styles.podcastSentencePrimaryActive : styles.podcastSentenceInactive]}>
+                  {sentence.text}
+                </Text>
+              ) : null}
+              {showChinese ? (
+                <Text
+                  style={[
+                    showEnglish ? styles.podcastSentenceSecondary : styles.podcastSentencePrimary,
+                    showEnglish
+                      ? (active ? styles.podcastSentenceSecondaryActive : styles.podcastSentenceInactive)
+                      : (active ? styles.podcastSentencePrimaryActive : styles.podcastSentenceInactive),
+                    showEnglish ? styles.podcastSentenceSecondarySpacing : null,
+                  ]}
+                >
+                  {sentence.translation ?? '暂无翻译'}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
+  if (!isIntensive) {
+    return (
+      <SafeAreaView style={styles.podcastSafeArea}>
+        <View style={styles.podcastBackdrop}>
+          <View style={styles.podcastBackdropGlowTop} />
+          <View style={styles.podcastBackdropGlowBottom} />
+
+          <View style={styles.topBar}>
+            <Pressable onPress={onBack} hitSlop={20} style={styles.topChevronDrag}>
+              <View style={[styles.dragHandle, styles.podcastDragHandle]} />
+            </Pressable>
+          </View>
+
+          <View style={styles.podcastBody}>
+            {isPodcastTranscriptVisible ? (
+              <>
+                <View style={styles.podcastCompactHeader}>
+                  <View style={styles.podcastCompactMeta}>
+                    <View style={styles.podcastCompactCover}>
+                      {article.imageUrl ? (
+                        <Image source={{ uri: article.imageUrl }} style={styles.coverImage} />
+                      ) : (
+                        <Text style={styles.podcastCompactFallback}>听</Text>
+                      )}
+                    </View>
+                    <View style={styles.podcastCompactCopy}>
+                      <Text style={styles.podcastCompactTitle} numberOfLines={1}>{article.title}</Text>
+                      <Text style={styles.podcastCompactSubtitle} numberOfLines={1}>{podcastSubtitle}</Text>
+                    </View>
+                  </View>
+
+                  <Pressable onPress={showMoreOptions} style={styles.podcastMoreButton} accessibilityLabel="更多选项">
+                    <Text style={styles.podcastMoreButtonText}>•••</Text>
+                  </Pressable>
+                </View>
+
+                {renderPodcastTranscriptStage()}
+              </>
+            ) : (
+              <View style={styles.podcastHeroBlock}>
+                <View style={styles.heroSection}>
+                  <View style={[styles.cover, styles.podcastHeroCover]}>
+                    {article.imageUrl ? (
+                      <Image source={{ uri: article.imageUrl }} style={styles.coverImage} />
+                    ) : (
+                      <Text style={styles.coverFallback}>听</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.podcastMetaRow}>
+                  <View style={styles.podcastMetaCopy}>
+                    <Text style={styles.podcastDateLabel}>{podcastEyebrow}</Text>
+                    <Text style={styles.podcastHeroTitle}>{article.title}</Text>
+                    <Text style={styles.podcastHeroSubtitle}>{podcastSubtitle}</Text>
+                  </View>
+
+                  <Pressable onPress={showMoreOptions} style={styles.podcastMoreButton} accessibilityLabel="更多选项">
+                    <Text style={styles.podcastMoreButtonText}>•••</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.podcastHeroSpacer} />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.podcastBottomDeck}>
+            <View style={styles.podcastProgressBlock}>
+              <ProgressBar
+                progress={articleProgress}
+                isIntensive={false}
+                trackColor="rgba(255,255,255,0.16)"
+                fillColor="#f3e8ee"
+                knobColor="#ffffff"
+              />
+              <View style={styles.podcastTimeRow}>
+                <Text style={styles.podcastTimeLabel}>{formatTime(progressMs)}</Text>
+                <Text style={styles.podcastTimeLabel}>-{formatTime(Math.max(0, articleDurationMs - progressMs))}</Text>
+              </View>
+              {playbackErrorMessage ? (
+                <Text style={styles.podcastPlaybackError}>{playbackErrorMessage}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.podcastControlsRow}>
+              <Pressable onPress={showSpeedOptions} style={styles.podcastSpeedButton}>
+                <Text style={styles.podcastSpeedText}>{playbackRate}x</Text>
+              </Pressable>
+
+              <PodcastSkipButton seconds={15} direction="back" onPress={() => onSeekBy(-15000)} />
+
+              <Pressable onPress={onTogglePlayback} style={styles.podcastPlayButton}>
+                {isPlaying ? <Text style={styles.podcastPauseGlyph}>||</Text> : <Text style={styles.podcastPlayGlyph}>▶</Text>}
+              </Pressable>
+
+              <PodcastSkipButton seconds={30} direction="forward" onPress={() => onSeekBy(30000)} />
+
+              <Pressable onPress={showMoreOptions} style={styles.podcastAuxControlButton}>
+                <Text style={styles.podcastAuxControlText}>•••</Text>
+              </Pressable>
+            </View>
+
+            {isPodcastTranscriptVisible ? (
+              <View style={styles.podcastSubtitleDock}>
+                <SubtitleModeSwitch subtitleMode={subtitleMode} setSubtitleMode={setSubtitleMode} tone="dark" />
+              </View>
+            ) : null}
+
+            <View style={styles.podcastUtilityRow}>
+              <Pressable
+                onPress={() => setIsPodcastTranscriptVisible((previous) => !previous)}
+                style={[styles.podcastUtilityButton, isPodcastTranscriptVisible ? styles.podcastUtilityButtonActive : null]}
+                accessibilityRole="button"
+                accessibilityLabel={isPodcastTranscriptVisible ? '隐藏字幕' : '显示字幕'}
+              >
+                <CaptionsIcon active={isPodcastTranscriptVisible} tone="dark" />
+              </Pressable>
+
+              <View style={styles.podcastUtilityButton}>
+                <BroadcastIcon />
+              </View>
+
+              <Pressable onPress={showMoreOptions} style={styles.podcastUtilityButton} accessibilityLabel="播放列表与更多选项">
+                <QueueIcon />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
-      <View style={styles.topBar}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backLabel}>返回</Text>
-        </Pressable>
-        <Text style={styles.modePill}>
-          {playbackMode === 'full' ? '播客泛听' : '逐句精听'}
-        </Text>
-      </View>
+    <SafeAreaView style={styles.screen}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-      <View style={styles.heroCard}>
-        <View style={styles.cover}>
-          {article.imageUrl ? (
-            <Image source={{ uri: article.imageUrl }} style={styles.coverImage} />
-          ) : (
-            <Text style={styles.coverFallback}>听</Text>
-          )}
+        {/* Top Handle */}
+        <View style={styles.topBar}>
+          <Pressable onPress={onBack} hitSlop={20} style={styles.topChevronDrag}>
+            <View style={styles.dragHandle} />
+          </Pressable>
         </View>
-        <View style={styles.heroText}>
-          <Text style={styles.series}>{article.series ?? '公开资源'}</Text>
-          <Text style={styles.title}>{article.title}</Text>
-          <Text style={styles.summary}>{article.summaryText ?? article.topic}</Text>
-        </View>
-      </View>
 
-      <View style={styles.tabsBlock}>
-        <SegmentedTabs
-          value={playbackMode}
-          onChange={setPlaybackMode}
-          options={[
-            { value: 'full', label: '播客泛听' },
-            { value: 'sentence', label: '逐句精听' }
-          ]}
-        />
-        <SegmentedTabs
-          value={subtitleMode}
-          onChange={setSubtitleMode}
-          options={[
-            { value: 'en', label: '英文' },
-            { value: 'zh', label: '中文' },
-            { value: 'both', label: '中英' }
-          ]}
-        />
-      </View>
-
-      {playbackMode === 'full' ? (
-        <View style={styles.podcastStage}>
-          <View style={styles.stageHeader}>
-            <Text style={styles.stageEyebrow}>Apple Podcasts Style</Text>
-            <Text style={styles.stageMeta}>
-              {formatTime(progressMs)} / {formatTime(articleDurationMs)}
-            </Text>
-          </View>
-          <ProgressLine progress={articleProgress} />
-          <View style={styles.stageSentence}>
-            {currentSentence ? renderSentenceText(currentSentence, true, true, true) : (
-              <Text style={styles.stageEmpty}>准备开始播放</Text>
+        {/* Hero Cover Art */}
+        <View style={styles.heroSection}>
+          <View style={[styles.cover, isPlaying ? styles.coverPlaying : styles.coverPaused]}>
+            {article.imageUrl ? (
+              <Image source={{ uri: article.imageUrl }} style={styles.coverImage} />
+            ) : (
+              <Text style={styles.coverFallback}>听</Text>
             )}
           </View>
         </View>
-      ) : (
-        <View style={styles.intensivePanel}>
-          <View style={styles.stageHeader}>
-            <Text style={styles.stageEyebrow}>
-              第 {currentSentenceIndex + 1} / {article.sentences.length} 句
-            </Text>
-            <Text style={styles.stageMeta}>
-              {formatTime(Math.max(0, progressMs - sentenceStartMs))} / {formatTime(sentenceDurationMs)}
+
+        {/* Main Player Area - Left Aligned exactly with cover */}
+        <View style={styles.playerSection}>
+
+          {/* Metadata */}
+          <View style={styles.metadataView}>
+            <Text style={styles.title} numberOfLines={2}>{article.title}</Text>
+            <Text style={styles.seriesLabel} numberOfLines={1}>
+              {article.topic} {article.series ? `— ${article.series}` : ''}
+              {isIntensive && (
+                <Text style={styles.modeHighlight}> · 精听第 {currentSentenceIndex + 1} 句</Text>
+              )}
             </Text>
           </View>
-          <ProgressLine progress={sentenceProgress} />
-          <View style={styles.focusSentence}>
-            {currentSentence ? renderSentenceText(currentSentence, true, true) : (
-              <Text style={styles.stageEmpty}>当前句内容加载中</Text>
-            )}
+
+          {/* Scrubber */}
+          <View style={styles.scrubberView}>
+            <ProgressBar progress={sentenceProgress} isIntensive />
+            <View style={styles.timeRow}>
+              <Text style={styles.timeLabel}>{formatTime(Math.max(0, progressMs - sentenceStartMs))}</Text>
+              <Text style={styles.timeLabel}>-{formatTime(Math.max(0, sentenceDurationMs - (progressMs - sentenceStartMs)))}</Text>
+            </View>
+            {playbackErrorMessage ? (
+              <Text style={styles.playbackError}>{playbackErrorMessage}</Text>
+            ) : null}
           </View>
-          <View style={styles.focusControls}>
-            <Pressable onPress={() => onJumpSentence('prev')} style={styles.controlButton}>
-              <Text style={styles.controlText}>上一句</Text>
+
+          {/* Primary Controls Row */}
+          <View style={styles.controlsRow}>
+            <Pressable onPress={() => onJumpSentence('prev')} style={styles.subCtrlWrapper}>
+              <Text style={styles.subCtrlGlyph}>|‹</Text>
             </Pressable>
-            <Pressable onPress={onTogglePlayback} style={styles.primaryControl}>
-              <Text style={styles.primaryControlText}>{isPlaying ? '暂停' : '播放'}</Text>
+
+            <Pressable onPress={onTogglePlayback} style={styles.playPauseWrap}>
+              <View style={styles.playPauseCircle}>
+                  {isPlaying ? <Text style={styles.pauseGlyph}>||</Text> : <Text style={styles.playGlyph}>▶</Text>}
+              </View>
             </Pressable>
-            <Pressable onPress={() => onJumpSentence('next')} style={styles.controlButton}>
-              <Text style={styles.controlText}>下一句</Text>
+
+            <Pressable onPress={() => onJumpSentence('next')} style={styles.subCtrlWrapper}>
+              <Text style={styles.subCtrlGlyph}>›|</Text>
             </Pressable>
-            <Pressable
-              onPress={onToggleSentenceLoop}
-              style={[styles.controlButton, isSentenceLooping ? styles.loopButtonActive : null]}
-            >
-              <Text style={[styles.controlText, isSentenceLooping ? styles.loopTextActive : null]}>
-                循环
+          </View>
+
+          {/* Bottom Tool Row */}
+          <View style={styles.toolsRow}>
+            <Pressable onPress={showSpeedOptions} style={styles.toolBtn}>
+              <Text style={[styles.toolBtnText, playbackRate !== 1 ? styles.toolBtnTextActive : null]}>
+                {playbackRate}x
               </Text>
             </Pressable>
+
+            <View style={styles.toolsCenterSpacer} />
+
+            <Pressable onPress={showMoreOptions} style={styles.toolBtn}>
+              <Text style={styles.toolBtnDots}>•••</Text>
+            </Pressable>
           </View>
         </View>
-      )}
 
-      <View style={styles.speedRow}>
-        <Text style={styles.speedLabel}>播放速度</Text>
-        <View style={styles.speedChips}>
-          {speedOptions.map((rate) => (
-            <Pressable
-              key={rate}
-              onPress={() => setPlaybackRate(rate)}
-              style={[styles.speedChip, playbackRate === rate ? styles.speedChipActive : null]}
-            >
-              <Text style={[styles.speedChipText, playbackRate === rate ? styles.speedChipTextActive : null]}>
-                {rate}x
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.transcriptHeader}>
+          <Text style={styles.transcriptTitle}>转录稿</Text>
+          <SubtitleModeSwitch subtitleMode={subtitleMode} setSubtitleMode={setSubtitleMode} />
         </View>
-      </View>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryHeading}>摘要信息</Text>
-        <View style={styles.summaryGrid}>
-          {article.summaryBlocks.map((item) => (
-            <View key={item.label} style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>{item.label}</Text>
-              <Text style={styles.summaryValue}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
+        {renderTranscriptList(onPlaySentence)}
 
-      <View style={styles.transcriptWrap}>
-        <Text style={styles.transcriptHeading}>
-          {playbackMode === 'full' ? '中英双语字幕' : '逐句精听列表'}
-        </Text>
-        <View style={styles.transcriptList}>
-          {article.sentences.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>句子拆分暂未返回</Text>
-              <Text style={styles.emptyBody}>后端已经返回文章数据，但这篇文章还没有句子时间轴。</Text>
-            </View>
-          ) : null}
-          {article.sentences.map((sentence, index) => {
-            const active = index === currentSentenceIndex;
-            return (
-              <Pressable
-                key={sentence.id}
-                onPress={() => onPlaySentence(index)}
-                style={[
-                  styles.sentenceCard,
-                  playbackMode === 'full' ? styles.podcastSentenceCard : null,
-                  active ? styles.sentenceCardActive : null
-                ]}
-              >
-                <Text style={[styles.sentenceIndex, active ? styles.sentenceIndexActive : null]}>
-                  {String(index + 1).padStart(2, '0')}
-                </Text>
-                {renderSentenceText(sentence, active)}
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  podcastSafeArea: {
+    flex: 1,
+    backgroundColor: '#504d56',
+  },
+  podcastBackdrop: {
+    flex: 1,
+    backgroundColor: '#56535d',
+    overflow: 'hidden',
+  },
+  podcastBackdropGlowTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '44%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  podcastBackdropGlowBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '48%',
+    backgroundColor: 'rgba(37,24,31,0.38)',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#ffffff'
+  },
   content: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 250,
-    gap: 18,
-    backgroundColor: '#f7f8fb'
+    paddingBottom: 80,
   },
   topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    paddingVertical: 14,
   },
-  backButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    minHeight: 38,
-    justifyContent: 'center'
+  topChevronDrag: {
+    width: 60,
+    height: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  backLabel: {
-    color: '#0f172a',
-    fontWeight: '800'
+  dragHandle: {
+    width: 36,
+    height: 5,
+    backgroundColor: '#d1d1d6',
+    borderRadius: 3,
   },
-  modePill: {
-    backgroundColor: '#fff7ed',
-    color: '#ea580c',
-    borderRadius: 999,
-    overflow: 'hidden',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    fontSize: 12,
-    fontWeight: '900'
+  podcastDragHandle: {
+    backgroundColor: 'rgba(255,255,255,0.58)',
   },
-  heroCard: {
-    flexDirection: 'row',
-    gap: 14,
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 16,
-    borderColor: 'rgba(226,232,240,0.9)',
-    borderWidth: 1,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 2
+  stateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stateTitle: { fontSize: 20, fontWeight: '600' },
+  stateBody: { color: '#8e8e93', marginTop: 8 },
+
+  heroSection: {
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 24,
   },
   cover: {
-    width: 96,
-    height: 96,
-    borderRadius: 22,
+    width: coverSize,
+    height: coverSize,
+    borderRadius: 16, // Apple standard slight roundness
+    backgroundColor: '#f2f2f7',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.15,
+    shadowRadius: 32,
+    elevation: 10,
     overflow: 'hidden',
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center'
   },
-  coverImage: {
-    width: '100%',
-    height: '100%'
+  coverPlaying: {
+    transform: [{ scale: 1 }],
   },
-  coverFallback: {
-    color: '#f97316',
-    fontSize: 34,
-    fontWeight: '900'
+  coverPaused: {
+    transform: [{ scale: 0.85 }], // Deep shrink just like Apple Music/Podcasts
+    shadowOpacity: 0.0,
   },
-  heroText: {
+  coverImage: { width: '100%', height: '100%' },
+  coverFallback: { fontSize: 60, color: '#c7c7cc', fontWeight: '700', alignSelf:'center', marginTop:'35%' },
+
+  playerSection: {
+    paddingHorizontal: CONTENT_PADDING,
+  },
+  podcastBody: {
     flex: 1,
-    gap: 7
+    paddingHorizontal: 28,
   },
-  series: {
-    color: '#f97316',
+  podcastHeroBlock: {
+    flex: 1,
+  },
+  podcastHeroCover: {
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+  },
+  podcastMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginTop: 4,
+  },
+  podcastMetaCopy: {
+    flex: 1,
+  },
+  podcastDateLabel: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  podcastHeroTitle: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '800',
+    lineHeight: 31,
+  },
+  podcastHeroSubtitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 18,
+    fontWeight: '500',
+    lineHeight: 24,
+    marginTop: 8,
+  },
+  podcastHeroSpacer: {
+    flex: 1,
+  },
+  podcastCompactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 18,
+    paddingTop: 8,
+  },
+  podcastCompactMeta: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  podcastCompactCover: {
+    width: 76,
+    height: 76,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  podcastCompactFallback: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 28,
+    fontWeight: '700',
+    alignSelf: 'center',
+    marginTop: 20,
+  },
+  podcastCompactCopy: {
+    flex: 1,
+  },
+  podcastCompactTitle: {
+    color: '#ffffff',
+    fontSize: 19,
+    fontWeight: '800',
+    lineHeight: 24,
+  },
+  podcastCompactSubtitle: {
+    color: 'rgba(255,255,255,0.68)',
+    fontSize: 16,
+    lineHeight: 21,
+    marginTop: 6,
+  },
+  podcastMoreButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podcastMoreButtonText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  podcastTranscriptViewport: {
+    flex: 1,
+  },
+  podcastTranscriptContent: {
+    paddingBottom: 32,
+    paddingTop: 8,
+  },
+  podcastTranscriptEmptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  podcastTranscriptEmpty: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 16,
+  },
+  podcastSentenceRow: {
+    paddingVertical: 14,
+  },
+  podcastSentencePrimary: {
+    color: '#ffffff',
+    fontFamily: 'Georgia',
+    fontSize: 27,
+    lineHeight: 41,
+    fontWeight: '700',
+  },
+  podcastSentencePrimaryActive: {
+    opacity: 1,
+  },
+  podcastSentenceSecondary: {
+    color: 'rgba(255,255,255,0.84)',
+    fontFamily: 'Georgia',
+    fontSize: 19,
+    lineHeight: 29,
+  },
+  podcastSentenceSecondaryActive: {
+    opacity: 0.76,
+  },
+  podcastSentenceSecondarySpacing: {
+    marginTop: 8,
+  },
+  podcastSentenceInactive: {
+    opacity: 0.18,
+  },
+  podcastBottomDeck: {
+    paddingHorizontal: 28,
+    paddingBottom: 24,
+    paddingTop: 8,
+  },
+  podcastProgressBlock: {
+    marginBottom: 20,
+  },
+  podcastTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  podcastTimeLabel: {
+    color: 'rgba(255,255,255,0.52)',
+    fontSize: 13,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  podcastPlaybackError: {
+    color: 'rgba(255,255,255,0.68)',
     fontSize: 12,
-    fontWeight: '900'
+    lineHeight: 17,
+    marginTop: 8,
   },
-  title: {
-    color: '#0f172a',
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '900'
-  },
-  summary: {
-    color: '#475569',
-    fontSize: 14,
-    lineHeight: 20
-  },
-  tabsBlock: {
-    gap: 10
-  },
-  podcastStage: {
-    backgroundColor: '#0f172a',
-    borderRadius: 30,
-    padding: 20,
-    gap: 18,
-    minHeight: 260
-  },
-  intensivePanel: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    borderRadius: 30,
-    padding: 20,
-    gap: 16
-  },
-  stageHeader: {
+  podcastControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10
+    gap: 10,
   },
-  stageEyebrow: {
-    color: '#fb923c',
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase'
+  podcastSpeedButton: {
+    minWidth: 42,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
-  stageMeta: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '800'
+  podcastSpeedText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  podcastSkipButton: {
+    width: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podcastSkipCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podcastSkipNumber: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  podcastSkipArrow: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginTop: 1,
+  },
+  podcastPlayButton: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podcastPlayGlyph: {
+    color: '#2f2931',
+    fontSize: 34,
+    marginLeft: 5,
+  },
+  podcastPauseGlyph: {
+    color: '#2f2931',
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  podcastAuxControlButton: {
+    minWidth: 42,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  podcastAuxControlText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  podcastSubtitleDock: {
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  podcastUtilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    paddingHorizontal: 54,
+  },
+  podcastUtilityButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podcastUtilityButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  queueIcon: {
+    width: 20,
+    gap: 3,
+  },
+  queueIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  queueIconDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.84)',
+  },
+  queueIconLine: {
+    flex: 1,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.84)',
+  },
+  broadcastIcon: {
+    width: 22,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  broadcastRingOuter: {
+    position: 'absolute',
+    bottom: 1,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.78)',
+    opacity: 0.4,
+  },
+  broadcastRingInner: {
+    position: 'absolute',
+    bottom: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.9)',
+    opacity: 0.7,
+  },
+  broadcastBase: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ffffff',
+    marginBottom: 1,
+  },
+
+  metadataView: {
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#000000',
+    lineHeight: 28,
+    marginBottom: 4,
+  },
+  seriesLabel: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#af52de', // Purple-ish iOS Podcasts brand color
+  },
+  modeHighlight: {
+    color: '#007aff',
+    fontWeight: '600',
+  },
+
+  scrubberView: {
+    marginBottom: 32,
   },
   progressTrack: {
-    height: 5,
-    backgroundColor: 'rgba(148,163,184,0.28)',
-    borderRadius: 999,
-    overflow: 'hidden'
+    height: 3, // Thinner Apple-style scrubber
+    backgroundColor: '#e5e5ea',
+    borderRadius: 1.5,
+    position: 'relative',
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#f97316',
-    borderRadius: 999
+    borderRadius: 1.5,
   },
-  stageSentence: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 170
+  progressKnob: {
+    position: 'absolute',
+    top: -3,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    marginLeft: -4.5,
+    backgroundColor: '#000000', // Solid simple knob
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 3,
   },
-  focusSentence: {
-    minHeight: 160,
-    justifyContent: 'center'
-  },
-  stageEmpty: {
-    color: '#94a3b8',
-    fontSize: 16,
-    textAlign: 'center'
-  },
-  stageEnglish: {
-    color: '#0f172a',
-    fontSize: 27,
-    lineHeight: 35,
-    fontWeight: '900',
-    textAlign: 'center'
-  },
-  stageEnglishInverse: {
-    color: '#e2e8f0'
-  },
-  stageEnglishActive: {
-    color: '#0f172a'
-  },
-  stageEnglishActiveInverse: {
-    color: '#ffffff'
-  },
-  stageChinese: {
-    color: '#64748b',
-    fontSize: 18,
-    lineHeight: 26,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 10
-  },
-  stageChineseInverse: {
-    color: '#94a3b8'
-  },
-  stageChineseActive: {
-    color: '#475569'
-  },
-  stageChineseActiveInverse: {
-    color: '#cbd5e1'
-  },
-  focusControls: {
+  timeRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
+    justifyContent: 'space-between',
   },
-  controlButton: {
-    minHeight: 40,
-    paddingHorizontal: 14,
-    borderRadius: 13,
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center'
+  timeLabel: {
+    fontSize: 12,
+    color: '#8e8e93',
+    fontVariant: ['tabular-nums'],
+    fontWeight: '600',
+    opacity: 0.8,
   },
-  controlText: {
-    color: '#334155',
-    fontSize: 13,
-    fontWeight: '800'
+  playbackError: {
+    color: '#d70015',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
   },
-  primaryControl: {
-    minHeight: 40,
-    paddingHorizontal: 18,
-    borderRadius: 13,
-    backgroundColor: '#f97316',
-    justifyContent: 'center'
-  },
-  primaryControlText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '900'
-  },
-  loopButtonActive: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#bbf7d0'
-  },
-  loopTextActive: {
-    color: '#15803d'
-  },
-  speedRow: {
+
+  controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
-  speedLabel: {
-    color: '#475569',
-    fontWeight: '800'
-  },
-  speedChips: {
-    flexDirection: 'row',
-    gap: 8
-  },
-  speedChip: {
-    minHeight: 34,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
+  playPauseWrap: {
+    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff'
   },
-  speedChipActive: {
-    backgroundColor: '#fff7ed',
-    borderColor: '#fed7aa'
+  playPauseCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#f2f2f7', // Solid minimal grey background
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  speedChipText: {
-    color: '#64748b',
+  playGlyph: {
+    fontSize: 32,
+    color: '#000000',
+    marginLeft: 6, // Optical centering for play
+  },
+  pauseGlyph: {
+    fontSize: 32,
     fontWeight: '800',
-    fontSize: 12
+    color: '#000000',
+    letterSpacing: -1,
   },
-  speedChipTextActive: {
-    color: '#ea580c'
+  subCtrlWrapper: {
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  summaryCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
-    gap: 16
+  subCtrlGlyph: {
+    fontSize: 26,
+    fontWeight: '400',
+    color: '#000000',
   },
-  summaryHeading: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '900'
-  },
-  summaryGrid: {
-    gap: 12
-  },
-  summaryItem: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    padding: 14,
-    gap: 6
-  },
-  summaryLabel: {
-    color: '#ea580c',
-    fontSize: 12,
-    fontWeight: '900'
-  },
-  summaryValue: {
-    color: '#1e293b',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '800'
-  },
-  loadingBody: {
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 22
-  },
-  retryButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#f97316',
-    borderRadius: 14,
-    minHeight: 42,
-    paddingHorizontal: 16,
-    justifyContent: 'center'
-  },
-  retryLabel: {
-    color: '#ffffff',
-    fontWeight: '800'
-  },
-  stateCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 18,
-    gap: 12
-  },
-  transcriptWrap: {
-    gap: 12
-  },
-  transcriptHeading: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '900'
-  },
-  transcriptList: {
-    gap: 10
-  },
-  emptyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    padding: 16,
-    gap: 8
-  },
-  emptyTitle: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '900'
-  },
-  emptyBody: {
-    color: '#60707e',
-    fontSize: 14,
-    lineHeight: 20
-  },
-  sentenceCard: {
+
+  toolsRow: {
     flexDirection: 'row',
-    gap: 12,
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 15,
-    opacity: 0.76
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    marginBottom: 40,
   },
-  podcastSentenceCard: {
-    opacity: 0.48
-  },
-  sentenceCardActive: {
-    backgroundColor: '#fff7ed',
-    borderColor: '#fed7aa',
-    opacity: 1
-  },
-  sentenceIndex: {
-    width: 30,
-    color: '#94a3b8',
-    fontWeight: '900'
-  },
-  sentenceIndexActive: {
-    color: '#f97316'
-  },
-  sentenceBody: {
+  toolsCenterSpacer: {
     flex: 1,
-    gap: 7
   },
-  english: {
-    color: '#334155',
+  toolBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  captionsToggle: {
+    alignItems: 'center',
+    borderRadius: 14,
+    justifyContent: 'center',
+  },
+  captionsToggleActive: {
+    backgroundColor: '#eef5ff',
+  },
+  captionsIcon: {
+    width: 24,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    justifyContent: 'space-between',
+    paddingHorizontal: 3,
+    paddingVertical: 3,
+  },
+  captionsIconRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  captionsIconLine: {
+    borderRadius: 1,
+    height: 2,
+  },
+  toolBtnText: {
     fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '800'
+    fontWeight: '600',
+    color: '#a1a1a6',
   },
-  englishActive: {
-    color: '#0f172a'
+  toolBtnTextActive: {
+    color: '#007aff',
   },
-  chinese: {
-    color: '#64748b',
+  toolBtnDots: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#a1a1a6',
+    letterSpacing: 2,
+  },
+  podcastTranscriptPanel: {
+    backgroundColor: '#f7f7fa',
+    borderRadius: 24,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  podcastTranscriptHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  podcastTranscriptTitle: {
+    color: '#1c1c1e',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  subtitleModeSwitch: {
+    alignItems: 'center',
+    backgroundColor: '#f2f2f7',
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 4,
+    padding: 3,
+  },
+  subtitleModeSwitchDark: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  subtitleModeChip: {
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  subtitleModeChipActive: {
+    backgroundColor: '#ffffff',
+  },
+  subtitleModeChipActiveDark: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  subtitleModeChipText: {
+    color: '#8e8e93',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  subtitleModeChipTextDark: {
+    color: 'rgba(255,255,255,0.65)',
+  },
+  subtitleModeChipTextActive: {
+    color: '#1c1c1e',
+  },
+  subtitleModeChipTextActiveDark: {
+    color: '#ffffff',
+  },
+
+  transcriptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: CONTENT_PADDING,
+    marginBottom: 16,
+  },
+  transcriptTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
+  },
+
+  transcriptList: {
+    paddingHorizontal: CONTENT_PADDING,
+    paddingBottom: 60,
+  },
+  transcriptEmpty: {
+    color: '#8e8e93',
     fontSize: 14,
-    lineHeight: 21
+    paddingVertical: 12,
   },
-  chineseActive: {
-    color: '#475569'
-  }
+  sentenceRow: {
+    paddingVertical: 14,
+  },
+  // Apple Podcasts transcript style is huge and bold for active
+  transcriptPrimary: {
+    fontSize: 20,
+    lineHeight: 28,
+    color: '#000000',
+    fontWeight: '700',
+    opacity: 0.3, // Dimmed until active
+  },
+  transcriptPrimaryActive: {
+    opacity: 1, // Full opacity when speaking
+  },
+  transcriptSecondary: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#a1a1a6',
+    fontWeight: '500',
+    opacity: 0.5,
+  },
+  transcriptSecondaryActive: {
+    opacity: 1,
+    color: '#8e8e93',
+  },
 });

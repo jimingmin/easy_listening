@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, SafeAreaView } from 'react-native';
 import type { ArticleMeta, PlaybackMode, ResourceCollection, TopicSummary } from '../models/article';
 import { CollectionCard } from '../components/CollectionCard';
 import { ResourceCard } from '../components/ResourceCard';
@@ -37,53 +37,31 @@ export function LibraryScreen({
     if (isLoading && articles.length === 0) {
       return (
         <View style={styles.stateCard}>
-          <Text style={styles.stateTitle}>正在加载真实资源</Text>
-          <Text style={styles.stateBody}>当前会从后端读取公开文章、合集和分类数据。</Text>
+          <Text style={styles.stateTitle}>Loading...</Text>
         </View>
       );
     }
-
     if (errorMessage && articles.length === 0) {
       return (
         <View style={styles.stateCard}>
-          <Text style={styles.stateTitle}>资源接口暂时不可用</Text>
+          <Text style={styles.stateTitle}>Unavailable</Text>
           <Text style={styles.stateBody}>{errorMessage}</Text>
-          <Text style={styles.debugHint}>已尝试地址：{apiBaseUrl}</Text>
           <Pressable onPress={onRetry} style={styles.retryButton}>
-            <Text style={styles.retryLabel}>重新加载</Text>
+            <Text style={styles.retryLabel}>Retry</Text>
           </Pressable>
         </View>
       );
     }
-
     return null;
   };
 
   const stateCard = renderLibraryState();
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Easy Listening Podcast</Text>
-          <Text style={styles.title}>像听播客一样泛听，再逐句拆开精听</Text>
-          <Text style={styles.subtitle}>
-            复用“英语精听酱”的核心语料，优先提供播客式播放、中英双语字幕和逐句精听。
-          </Text>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{articles.length}</Text>
-              <Text style={styles.heroStatLabel}>公开音频</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{collections.length}</Text>
-              <Text style={styles.heroStatLabel}>合集</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>中英</Text>
-              <Text style={styles.heroStatLabel}>字幕模式</Text>
-            </View>
-          </View>
+        <View style={styles.header}>
+          <Text style={styles.largeTitle}>现在就听</Text>
         </View>
 
         {errorMessage && articles.length > 0 ? (
@@ -92,14 +70,16 @@ export function LibraryScreen({
           </View>
         ) : null}
 
-        <SegmentedTabs<LibraryTab>
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'public', label: '公开资源' },
-            { value: 'collections', label: '合集' }
-          ]}
-        />
+        <View style={styles.tabsWrapper}>
+          <SegmentedTabs<LibraryTab>
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'public', label: '最新内容' },
+              { value: 'collections', label: '所有节目' }
+            ]}
+          />
+        </View>
 
         {stateCard}
 
@@ -107,19 +87,16 @@ export function LibraryScreen({
           <View style={styles.section}>
             {featuredTopics.length > 0 ? (
               <View style={styles.topicBlock}>
-                <Text style={styles.sectionTitle}>公开分类</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicScroll}>
                   {featuredTopics.map((topic) => (
                     <View key={topic.name} style={styles.topicChip}>
                       <Text style={styles.topicName}>{topic.name}</Text>
-                      <Text style={styles.topicCount}>{topic.count}</Text>
                     </View>
                   ))}
                 </ScrollView>
               </View>
             ) : null}
 
-            <Text style={styles.sectionTitle}>公开资源</Text>
             <View style={styles.list}>
               {articles.map((article) => (
                 <ResourceCard
@@ -131,174 +108,124 @@ export function LibraryScreen({
               ))}
             </View>
             {!isLoading && articles.length === 0 && !errorMessage ? (
-              <Text style={styles.collectionHint}>当前后端还没有返回公开文章。</Text>
+              <Text style={styles.collectionHint}>暂无内容。</Text>
             ) : null}
           </View>
         ) : (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>合集浏览</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionScroll}>
               {collections.map((collection) => (
                 <CollectionCard key={collection.id} collection={collection} />
               ))}
             </ScrollView>
             <Text style={styles.collectionHint}>
-              目前合集数据来自后端真实 `series` 聚合结果，后续会继续补合集详情和顺序播放。
+              可以在这里浏览所有节目合集。
             </Text>
           </View>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f7f8fb'
+    backgroundColor: '#ffffff'
   },
   content: {
-    paddingHorizontal: 18,
-    paddingTop: 16,
     paddingBottom: 180,
-    gap: 20
   },
-  hero: {
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 20,
-    gap: 12,
-    borderColor: 'rgba(226,232,240,0.86)',
-    borderWidth: 1,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 2
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e5ea',
   },
-  eyebrow: {
-    color: '#f97316',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textTransform: 'uppercase'
-  },
-  title: {
-    color: '#0f172a',
-    fontSize: 30,
-    lineHeight: 36,
-    fontWeight: '900'
-  },
-  subtitle: {
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 23
-  },
-  heroStats: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4
-  },
-  heroStat: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10
-  },
-  heroStatValue: {
-    color: '#0f172a',
-    fontSize: 18,
-    fontWeight: '900'
-  },
-  heroStatLabel: {
-    color: '#64748b',
-    fontSize: 12,
+  largeTitle: {
+    color: '#000000',
+    fontSize: 34,
     fontWeight: '700',
-    marginTop: 2
+    letterSpacing: 0.4,
+  },
+  tabsWrapper: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   inlineNotice: {
+    marginHorizontal: 20,
+    marginTop: 16,
     backgroundColor: '#fff6da',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   inlineNoticeText: {
     color: '#8a5b13',
     fontSize: 13,
-    lineHeight: 19,
     fontWeight: '600'
   },
   section: {
-    gap: 14
-  },
-  sectionTitle: {
-    color: '#0f172a',
-    fontSize: 21,
-    fontWeight: '900'
+    paddingHorizontal: 20,
   },
   topicBlock: {
-    gap: 12
+    marginHorizontal: -20,
+    marginBottom: 16,
+  },
+  topicScroll: {
+    paddingHorizontal: 20,
+    gap: 8,
   },
   topicChip: {
-    backgroundColor: '#ffffff',
-    borderColor: 'rgba(226,232,240,0.9)',
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 4,
-    marginRight: 10,
-    minWidth: 110
+    backgroundColor: '#f2f2f7',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   topicName: {
-    color: '#0f172a',
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  topicCount: {
-    color: '#7c8a96',
-    fontSize: 12
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '600'
   },
   list: {
-    gap: 14
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e5e5ea',
+  },
+  collectionScroll: {
+    paddingRight: 20,
   },
   collectionHint: {
-    color: '#64748b',
+    color: '#8e8e93',
     fontSize: 14,
-    lineHeight: 20
+    lineHeight: 20,
+    marginTop: 24,
+    textAlign: 'center'
   },
   stateCard: {
-    backgroundColor: '#fffaf4',
-    borderRadius: 22,
-    padding: 18,
-    gap: 10
+    padding: 20,
+    alignItems: 'center',
+    gap: 8
   },
   stateTitle: {
-    color: '#1d2731',
-    fontSize: 18,
-    fontWeight: '800'
+    color: '#8e8e93',
+    fontSize: 15,
+    fontWeight: '600'
   },
   stateBody: {
-    color: '#4f5f6d',
-    fontSize: 14,
-    lineHeight: 21
-  },
-  debugHint: {
-    color: '#7a5a2c',
-    fontSize: 12,
-    lineHeight: 18
+    color: '#8e8e93',
+    fontSize: 13,
+    textAlign: 'center'
   },
   retryButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#1d2731',
-    borderRadius: 12,
-    minHeight: 40,
-    paddingHorizontal: 14,
-    justifyContent: 'center'
+    marginTop: 8,
+    backgroundColor: '#007aff',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   retryLabel: {
-    color: '#fff8ef',
-    fontWeight: '700'
+    color: '#ffffff',
+    fontWeight: '600'
   }
 });

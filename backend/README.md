@@ -31,7 +31,7 @@ unstable access to `files.pythonhosted.org`, use the mirror options above
 instead of the default PyPI index.
 
 ```bash
-PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
+PYTHONPATH=backend ./backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8082 --reload
 ```
 
 Binding to `0.0.0.0` is recommended for Expo / iOS device debugging so the app can reach the backend from the local network.

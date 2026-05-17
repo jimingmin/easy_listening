@@ -31,33 +31,32 @@ export function SegmentedTabs<T extends string>({
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
-    backgroundColor: '#eef2f7',
-    borderColor: 'rgba(148,163,184,0.28)',
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 4,
-    gap: 4
+    backgroundColor: '#e5e5ea',
+    borderRadius: 8,
+    padding: 2,
   },
   tab: {
     flex: 1,
-    minHeight: 40,
-    borderRadius: 12,
+    minHeight: 32,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center'
   },
   tabActive: {
     backgroundColor: '#ffffff',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
+    shadowColor: '#000000',
+    shadowOpacity: 0.04,
+    shadowRadius: 1,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 1
   },
   label: {
-    color: '#64748b',
-    fontWeight: '800'
+    color: '#000000',
+    fontWeight: '500',
+    fontSize: 13,
   },
   labelActive: {
-    color: '#f97316'
+    color: '#000000',
+    fontWeight: '600'
   }
 });

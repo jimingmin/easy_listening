@@ -1,6 +1,12 @@
 import { NativeModules, Platform } from 'react-native';
 import type { ArticleDetail, ArticleMeta, ArticleSummaryBlock, ResourceCollection, Sentence, TopicSummary } from '../models/article';
 
+declare const process: {
+  env?: {
+    EXPO_PUBLIC_API_BASE_URL?: string;
+  };
+};
+
 interface ApiArticleListItem {
   id: string;
   user_id?: string | null;
@@ -65,6 +71,9 @@ interface ApiCollectionListResponse {
   items: ApiCollectionSummary[];
 }
 
+const IOS_API_BASE_URL = 'http://106.14.147.33:8082';
+const API_PORT = 8082;
+
 class ApiError extends Error {
   status: number;
 
@@ -75,13 +84,7 @@ class ApiError extends Error {
 }
 
 function getConfiguredBaseUrl(): string | undefined {
-  const processLike = globalThis as {
-    process?: {
-      env?: Record<string, string | undefined>;
-    };
-  };
-
-  return processLike.process?.env?.EXPO_PUBLIC_API_BASE_URL;
+  return process.env?.EXPO_PUBLIC_API_BASE_URL;
 }
 
 function isHostLoopback(hostname: string): boolean {
@@ -164,33 +167,34 @@ export function getApiBaseUrls(): string[] {
 
   if (Platform.OS === 'ios') {
     return uniqueUrls([
-      'http://127.0.0.1:8000',
-      'http://localhost:8000',
-      metroHost ? `http://${metroHost}:8000` : null
+      IOS_API_BASE_URL,
+      `http://127.0.0.1:${API_PORT}`,
+      `http://localhost:${API_PORT}`,
+      metroHost ? `http://${metroHost}:${API_PORT}` : null
     ]);
   }
 
   if (Platform.OS === 'android') {
     return uniqueUrls([
-      'http://10.0.2.2:8000',
-      metroHost ? `http://${metroHost}:8000` : null
+      `http://10.0.2.2:${API_PORT}`,
+      metroHost ? `http://${metroHost}:${API_PORT}` : null
     ]);
   }
 
   if (Platform.OS === 'web') {
     const webHost = getWebHost();
     return uniqueUrls([
-      webHost ? `http://${webHost}:8000` : null,
-      metroHost ? `http://${metroHost}:8000` : null,
-      'http://127.0.0.1:8000'
+      webHost ? `http://${webHost}:${API_PORT}` : null,
+      metroHost ? `http://${metroHost}:${API_PORT}` : null,
+      `http://127.0.0.1:${API_PORT}`
     ]);
   }
 
-  return uniqueUrls([metroHost ? `http://${metroHost}:8000` : null, 'http://127.0.0.1:8000']);
+  return uniqueUrls([metroHost ? `http://${metroHost}:${API_PORT}` : null, `http://127.0.0.1:${API_PORT}`]);
 }
 
 export function getApiBaseUrl(): string {
-  return getApiBaseUrls()[0] ?? 'http://127.0.0.1:8000';
+  return getApiBaseUrls()[0] ?? `http://127.0.0.1:${API_PORT}`;
 }
 
 async function requestJson<T>(path: string): Promise<T> {
@@ -290,13 +294,22 @@ function mapArticleMeta(item: ApiArticleListItem): ArticleMeta {
 
 function mapArticleDetail(item: ApiArticleDetailResponse): ArticleDetail {
   const meta = mapArticleMeta(item);
+  const sentences = item.sentences
+    .map(mapSentence)
+    .sort((left, right) => {
+      const leftStart = left.startMs ?? Number.POSITIVE_INFINITY;
+      const rightStart = right.startMs ?? Number.POSITIVE_INFINITY;
+      if (leftStart !== rightStart) return leftStart - rightStart;
+      return left.sentenceSeq - right.sentenceSeq;
+    });
+
   return {
     ...meta,
     bodyText: item.body_text ?? undefined,
     keyWords: item.key_words ?? [],
     keyPhrases: item.key_phrases ?? [],
     summaryBlocks: buildSummaryBlocks(meta),
-    sentences: item.sentences.map(mapSentence)
+    sentences
   };
 }
 

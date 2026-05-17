@@ -11,7 +11,12 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.easy-listening"
+      "bundleIdentifier": "com.anonymous.easy-listening",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "usesCleartextTraffic": true,

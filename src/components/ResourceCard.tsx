@@ -8,55 +8,51 @@ interface ResourceCardProps {
   onPlay: (id: string, mode: PlaybackMode) => void;
 }
 
+function getDurationText(ms?: number | null): string {
+  if (!ms || ms <= 0) return '';
+  const mins = Math.ceil(ms / 60000);
+  return `${mins} 分钟`;
+}
+
 export function ResourceCard({ article, onOpen, onPlay }: ResourceCardProps) {
   const statusLabel = article.processingStatus && article.processingStatus !== 'ready'
     ? ` · ${article.processingStatus}`
     : '';
+  const durationText = getDurationText(article.durationMs);
 
   return (
     <Pressable onPress={() => onOpen(article.id)} style={styles.card}>
-      <View style={styles.topRow}>
-        <View style={styles.cover}>
-          {article.imageUrl ? (
-            <Image source={{ uri: article.imageUrl }} style={styles.coverImage} />
-          ) : (
-            <Text style={styles.coverFallback}>听</Text>
-          )}
-        </View>
-        <View style={styles.headerText}>
-          <View style={styles.badges}>
-            <Text style={styles.level}>{article.level}</Text>
-            <Text style={styles.series}>{article.series ?? '公开资源'}</Text>
-          </View>
-          <Text style={styles.title}>{article.title}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.summary}>{article.summaryText ?? article.topic}</Text>
-      <View style={styles.footer}>
-        <Text style={styles.meta}>
-          {article.topic} · {article.sentenceCount} 句{statusLabel}
+      <View style={styles.content}>
+        <Text style={styles.dateLabel} numberOfLines={1}>
+          {article.topic} {article.series ? `· ${article.series}` : ''}
         </Text>
-        <View style={styles.actions}>
-          <Pressable
-            onPress={(event) => {
-              event.stopPropagation();
-              onPlay(article.id, 'sentence');
-            }}
-            style={styles.listenCta}
-          >
-            <Text style={styles.listenCtaText}>精听</Text>
-          </Pressable>
+        <Text style={styles.title} numberOfLines={2}>{article.title}</Text>
+        <Text style={styles.summary} numberOfLines={2}>
+          {article.summaryText ?? article.topic}
+        </Text>
+        <View style={styles.footer}>
           <Pressable
             onPress={(event) => {
               event.stopPropagation();
               onPlay(article.id, 'full');
             }}
-            style={styles.playCta}
+            style={styles.playBtn}
+            hitSlop={8}
           >
-            <Text style={styles.playCtaText}>泛听</Text>
+            <Text style={styles.playBtnIcon}>▶</Text>
           </Pressable>
+          <Text style={styles.metaLabel}>
+            {durationText ? `${durationText} · ` : ''}{article.sentenceCount} 句{statusLabel}
+          </Text>
+          <Text style={styles.level}>{article.level}</Text>
         </View>
+      </View>
+      <View style={styles.cover}>
+        {article.imageUrl ? (
+          <Image source={{ uri: article.imageUrl }} style={styles.coverImage} />
+        ) : (
+          <Text style={styles.coverFallback}>听</Text>
+        )}
       </View>
     </Pressable>
   );
@@ -64,113 +60,82 @@ export function ResourceCard({ article, onOpen, onPlay }: ResourceCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderColor: 'rgba(226,232,240,0.9)',
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 14,
-    gap: 12,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2
-  },
-  topRow: {
     flexDirection: 'row',
-    gap: 12
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e5ea',
+    gap: 16,
+  },
+  content: {
+    flex: 1,
+    gap: 4,
   },
   cover: {
-    width: 74,
-    height: 74,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: '#f2f2f7',
     overflow: 'hidden',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    marginTop: 18,
   },
   coverImage: {
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
   coverFallback: {
-    color: '#f97316',
-    fontSize: 24,
-    fontWeight: '900'
+    color: '#8e8e93',
+    fontSize: 20,
+    fontWeight: '700',
   },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 7
-  },
-  badges: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center'
-  },
-  level: {
-    backgroundColor: '#fff7ed',
-    color: '#ea580c',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
+  dateLabel: {
+    color: '#8e8e93',
     fontSize: 12,
-    fontWeight: '800'
-  },
-  series: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700'
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   title: {
-    color: '#0f172a',
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '800'
+    color: '#000000',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '600',
   },
   summary: {
-    color: '#475569',
+    color: '#8e8e93',
     fontSize: 14,
-    lineHeight: 21
+    lineHeight: 20,
+    marginTop: 4,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10
+    justifyContent: 'flex-start',
+    gap: 8,
+    marginTop: 8,
   },
-  meta: {
-    flex: 1,
-    color: '#64748b',
-    fontSize: 13
+  playBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f2f2f7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  actions: {
-    flexDirection: 'row',
-    gap: 8
+  playBtnIcon: {
+    color: '#007aff',
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 2, // optical center for play triangle
   },
-  listenCta: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#bbf7d0',
-    borderWidth: 1,
-    minHeight: 36,
-    paddingHorizontal: 13,
-    borderRadius: 12,
-    justifyContent: 'center'
+  level: {
+    color: '#8e8e93',
+    fontSize: 13,
   },
-  listenCtaText: {
-    color: '#15803d',
-    fontWeight: '800'
+  metaLabel: {
+    color: '#8e8e93',
+    fontSize: 13,
   },
-  playCta: {
-    backgroundColor: '#f97316',
-    minHeight: 36,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    justifyContent: 'center'
-  },
-  playCtaText: {
-    color: '#ffffff',
-    fontWeight: '800'
-  }
 });
